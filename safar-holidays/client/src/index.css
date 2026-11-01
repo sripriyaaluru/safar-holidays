@@ -1,0 +1,139 @@
+@import "tailwindcss";
+
+/* Design tokens: indigo ink, marigold for actions, peacock teal for links */
+@theme {
+  --font-display: "Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Instrument Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  --color-ink: #1b2a4a;
+  --color-ink-soft: #33415f;
+  --color-slate: #5b6578;
+  --color-line: #d7dee8;
+  --color-mist: #eef2f6;
+  --color-paper: #f7f9fb;
+  --color-marigold: #f4a300;
+  --color-marigold-deep: #d98c00;
+  --color-marigold-soft: #fff3d6;
+  --color-peacock: #0f7c80;
+  --color-peacock-soft: #e0f2f1;
+  --color-sindoor: #b83227;
+  --color-leaf: #2e7d4f;
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    @apply bg-paper font-sans text-ink antialiased;
+    font-size: 16px;
+    line-height: 1.55;
+  }
+  h1,
+  h2,
+  h3,
+  h4 {
+    @apply font-display;
+    letter-spacing: -0.015em;
+    line-height: 1.12;
+  }
+  :focus-visible {
+    outline: 3px solid var(--color-peacock);
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  .container-page {
+    @apply mx-auto w-full max-w-6xl px-4 sm:px-6;
+  }
+
+  .btn-primary,
+  .btn-dark,
+  .btn-ghost,
+  .btn-danger {
+    @apply inline-flex items-center justify-center gap-2 rounded-full px-5 py-2.5 text-[15px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60;
+  }
+  .btn-primary {
+    @apply bg-marigold text-ink hover:bg-marigold-deep;
+  }
+  .btn-dark {
+    @apply bg-ink text-white hover:bg-ink-soft;
+  }
+  .btn-ghost {
+    @apply border border-line bg-white text-ink hover:border-ink;
+  }
+  .btn-danger {
+    @apply border border-sindoor/30 bg-white text-sindoor hover:bg-sindoor hover:text-white;
+  }
+
+  .field-label {
+    @apply mb-1.5 block text-sm font-semibold text-ink;
+  }
+  .field {
+    @apply w-full rounded-xl border border-line bg-white px-3.5 py-2.5 text-[15px] text-ink placeholder:text-slate/70 focus:border-peacock focus:outline-none focus:ring-2 focus:ring-peacock/25;
+  }
+
+  .link {
+    @apply font-semibold text-peacock underline-offset-4 hover:underline;
+  }
+
+  /* The booking ticket: a boarding-pass style panel with a perforated tear line */
+  .ticket {
+    @apply relative rounded-[22px] bg-white;
+    box-shadow: 0 1px 0 var(--color-line), 0 18px 40px -24px rgb(27 42 74 / 0.35);
+  }
+  .ticket-tear {
+    @apply relative my-0 border-t-2 border-dashed border-line;
+  }
+  .ticket-tear::before,
+  .ticket-tear::after {
+    content: "";
+    position: absolute;
+    top: -13px;
+    width: 24px;
+    height: 24px;
+    border-radius: 9999px;
+    background: var(--ticket-cutout, var(--color-paper));
+  }
+  .ticket-tear::before {
+    left: -12px;
+  }
+  .ticket-tear::after {
+    right: -12px;
+  }
+
+  /* Vertical tear line for wide tickets (My trips) */
+  .ticket-tear-v {
+    @apply relative border-l-2 border-dashed border-line;
+  }
+  .ticket-tear-v::before,
+  .ticket-tear-v::after {
+    content: "";
+    position: absolute;
+    left: -13px;
+    width: 24px;
+    height: 24px;
+    border-radius: 9999px;
+    background: var(--ticket-cutout, var(--color-paper));
+  }
+  .ticket-tear-v::before {
+    top: -12px;
+  }
+  .ticket-tear-v::after {
+    bottom: -12px;
+  }
+
+  .stamp {
+    @apply inline-flex -rotate-3 items-center rounded-md border-2 px-2 py-0.5 font-display text-sm font-bold;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
