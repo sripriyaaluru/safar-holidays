@@ -4,7 +4,7 @@ A full-stack travel agency website where customers can browse tour packages, sea
 save favourites, book trips and leave reviews, and where an admin manages packages, bookings,
 enquiries and customers from a dashboard.
 
-**Team:** _Member 1 name (roll no.)_ and _Member 2 name (roll no.)_
+**Team:** Sripriya Aluru (roll no. 13)_ and Shruti Bhoi (roll no. 21)_
 
 ---
 
