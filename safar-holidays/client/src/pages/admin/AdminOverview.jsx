@@ -1,7 +1,50 @@
 import { Link } from 'react-router';
 import { ErrorState, Loader } from '../../components/States.jsx';
 import { useApi } from '../../lib/api.js';
-import { STATUS_STYLES, formatDate, formatINR } from '../../lib/format.js';
+import { CATEGORY_LABELS, STATUS_STYLES, formatDate, formatINR } from '../../lib/format.js';
+
+/** Simple bar chart drawn with CSS: one bar per month. */
+function MonthlyChart({ monthly }) {
+  const max = Math.max(1, ...monthly.map((m) => m.revenue));
+  return (
+    <figure>
+      <div className="flex h-48 items-end gap-3" role="img" aria-label={`Confirmed revenue for the last ${monthly.length} months`}>
+        {monthly.map((m) => (
+          <div key={m.month} className="flex h-full flex-1 flex-col items-center justify-end gap-1">
+            <span className="text-xs font-semibold tabular-nums text-slate">
+              {m.revenue ? `₹${Math.round(m.revenue / 1000)}k` : ''}
+            </span>
+            <div
+              className="w-full max-w-14 rounded-t-lg bg-peacock"
+              style={{ height: `${Math.max(2, (m.revenue / max) * 100)}%` }}
+              title={`${m.label}: ${formatINR(m.revenue)}, ${m.bookings} bookings`}
+            />
+          </div>
+        ))}
+      </div>
+      <div className="mt-2 flex gap-3 border-t border-line pt-2">
+        {monthly.map((m) => (
+          <span key={m.month} className="flex-1 text-center text-sm text-slate">
+            {m.label}
+            <span className="block text-xs">{m.bookings} bkg</span>
+          </span>
+        ))}
+      </div>
+      <table className="sr-only">
+        <caption>Monthly revenue</caption>
+        <tbody>
+          {monthly.map((m) => (
+            <tr key={m.month}>
+              <th>{m.label}</th>
+              <td>{formatINR(m.revenue)}</td>
+              <td>{m.bookings} bookings</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </figure>
+  );
+}
 
 function Stat({ label, value, children }) {
   return (
@@ -20,7 +63,8 @@ export default function AdminOverview() {
   if (error) return <ErrorState message={error} onRetry={reload} />;
   if (!data) return null;
 
-  const { totals, byStatus, topPackages, recentBookings } = data;
+  const { totals, byStatus, topPackages, recentBookings, monthly = [], payments, byCategory = [] } = data;
+  const categoryMax = Math.max(1, ...byCategory.map((c) => c.bookings));
 
   return (
     <div className="space-y-10">
@@ -37,7 +81,11 @@ export default function AdminOverview() {
             <span className="text-slate">None waiting</span>
           )}
         </Stat>
-        <Stat label="Customers" value={totals.customers} />
+        <Stat label="Customers" value={totals.customers}>
+          <span className="text-slate">
+            {totals.subscribers ?? 0} newsletter subscribers · avg rating {totals.avgRating ?? 0}
+          </span>
+        </Stat>
         <Stat label="Live packages" value={totals.packages}>
           <Link to="/admin/packages/new" className="link">
             Add a package
@@ -61,6 +109,50 @@ export default function AdminOverview() {
             ))}
           </ul>
         </div>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-[1.6fr_1fr]">
+        <section className="rounded-2xl border border-line bg-white p-5">
+          <h2 className="text-lg font-bold">Revenue, last 6 months</h2>
+          <div className="mt-4">
+            <MonthlyChart monthly={monthly} />
+          </div>
+        </section>
+        <section className="space-y-4">
+          {payments && (
+            <div className="rounded-2xl border border-line bg-white p-5">
+              <h2 className="text-lg font-bold">Payments</h2>
+              <dl className="mt-3 space-y-2 text-[15px]">
+                <div className="flex justify-between">
+                  <dt className="text-slate">Collected online</dt>
+                  <dd className="font-semibold text-leaf tabular-nums">{formatINR(payments.paid)}</dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt className="text-slate">Due (confirmed, unpaid)</dt>
+                  <dd className="font-semibold text-marigold-deep tabular-nums">{formatINR(payments.due)}</dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt className="text-slate">Refunded</dt>
+                  <dd className="font-semibold text-peacock tabular-nums">{formatINR(payments.refunded)}</dd>
+                </div>
+              </dl>
+            </div>
+          )}
+          <div className="rounded-2xl border border-line bg-white p-5">
+            <h2 className="text-lg font-bold">Bookings by trip type</h2>
+            <ul className="mt-3 space-y-2">
+              {byCategory.map((c) => (
+                <li key={c.category} className="grid grid-cols-[6rem_1fr_2rem] items-center gap-2 text-sm">
+                  <span>{CATEGORY_LABELS[c.category] || c.category}</span>
+                  <span className="h-2.5 overflow-hidden rounded-full bg-mist">
+                    <span className="block h-full rounded-full bg-marigold" style={{ width: `${(c.bookings / categoryMax) * 100}%` }} />
+                  </span>
+                  <span className="text-right tabular-nums">{c.bookings}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </section>
       </div>
 
       <section>

@@ -1,6 +1,6 @@
 // The booking panel on a package page, styled like a boarding pass.
 import { useEffect, useState } from 'react';
-import { Minus, Plus } from 'lucide-react';
+import { Minus, Plus, TicketPercent, X } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useToast } from '../context/ToastContext.jsx';
@@ -56,6 +56,35 @@ export default function BookingTicket({ pkg }) {
   });
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [couponInput, setCouponInput] = useState('');
+  const [coupon, setCoupon] = useState(null); // { code, discount, description }
+  const [couponState, setCouponState] = useState({ busy: false, error: '' });
+
+  async function applyCoupon(code = couponInput) {
+    const clean = code.trim().toUpperCase();
+    if (!clean) {
+      setCouponState({ busy: false, error: 'Enter a coupon code.' });
+      return;
+    }
+    setCouponState({ busy: true, error: '' });
+    try {
+      const q = await api('/bookings/quote', {
+        method: 'POST',
+        body: { package_id: pkg.id, adults: form.adults, children: form.children, coupon_code: clean },
+      });
+      setCoupon({ code: q.code, discount: q.discount, description: q.description });
+      setCouponInput(q.code);
+      setCouponState({ busy: false, error: '' });
+    } catch (err) {
+      setCoupon(null);
+      setCouponState({ busy: false, error: err.message });
+    }
+  }
+
+  // The discount depends on the group size, so check the coupon again when it changes.
+  useEffect(() => {
+    if (coupon) applyCoupon(coupon.code);
+  }, [form.adults, form.children]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (user?.phone) setForm((f) => (f.contact_phone ? f : { ...f, contact_phone: user.phone }));
@@ -63,7 +92,9 @@ export default function BookingTicket({ pkg }) {
 
   const set = (key, value) => setForm((f) => ({ ...f, [key]: value }));
   const travellers = form.adults + form.children;
-  const total = tripTotal(pkg.price, form.adults, form.children);
+  const subtotal = tripTotal(pkg.price, form.adults, form.children);
+  const discount = coupon ? Math.min(coupon.discount, subtotal) : 0;
+  const total = subtotal - discount;
   const endDate = form.travel_date ? addDays(form.travel_date, pkg.duration_days - 1) : '';
 
   async function onSubmit(e) {
@@ -75,7 +106,7 @@ export default function BookingTicket({ pkg }) {
     }
     setBusy(true);
     try {
-      const { booking } = await api('/bookings', { method: 'POST', body: { package_id: pkg.id, ...form } });
+      const { booking } = await api('/bookings', { method: 'POST', body: { package_id: pkg.id, ...form, coupon_code: coupon?.code || '' } });
       toast(`Booking ${booking.booking_ref} sent. We will confirm it within 24 hours.`);
       navigate('/trips');
     } catch (err) {
@@ -153,6 +184,63 @@ export default function BookingTicket({ pkg }) {
             maxLength={500}
           />
         </label>
+
+        <div>
+          <span className="field-label">Coupon code</span>
+          {coupon ? (
+            <div className="flex items-center justify-between gap-3 rounded-xl border border-leaf/40 bg-leaf/5 px-3.5 py-2.5">
+              <p className="text-sm">
+                <span className="font-display font-bold text-leaf">{coupon.code}</span>
+                <span className="block text-slate">{coupon.description}</span>
+              </p>
+              <button
+                type="button"
+                className="rounded-full p-1 hover:bg-white"
+                onClick={() => {
+                  setCoupon(null);
+                  setCouponInput('');
+                }}
+                aria-label="Remove coupon"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+          ) : (
+            <div className="flex gap-2">
+              <label className="flex-1">
+                <span className="sr-only">Coupon code</span>
+                <input
+                  className="field uppercase"
+                  placeholder="WELCOME10"
+                  value={couponInput}
+                  onChange={(e) => setCouponInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      if (user) applyCoupon();
+                    }
+                  }}
+                  maxLength={20}
+                  aria-invalid={Boolean(couponState.error)}
+                  aria-describedby="coupon-msg"
+                  disabled={!user}
+                />
+              </label>
+              <button
+                type="button"
+                className="btn-ghost px-4"
+                onClick={() => applyCoupon()}
+                disabled={!user || couponState.busy}
+              >
+                <TicketPercent className="size-4" aria-hidden />
+                {couponState.busy ? '…' : 'Apply'}
+              </button>
+            </div>
+          )}
+          <p id="coupon-msg" className={`mt-1 text-sm ${couponState.error ? 'font-semibold text-sindoor' : 'text-slate'}`}>
+            {couponState.error || (!user ? 'Log in to use a coupon.' : '')}
+          </p>
+        </div>
       </div>
 
       <div className="ticket-tear" aria-hidden />
@@ -172,6 +260,18 @@ export default function BookingTicket({ pkg }) {
               {form.children > 0 && `, ${form.children} ${form.children === 1 ? 'child' : 'children'}`}
             </dd>
           </div>
+          {discount > 0 && (
+            <>
+              <div className="flex justify-between gap-4">
+                <dt className="text-slate">Subtotal</dt>
+                <dd className="tabular-nums">{formatINR(subtotal)}</dd>
+              </div>
+              <div className="flex justify-between gap-4 text-leaf">
+                <dt>Coupon {coupon.code}</dt>
+                <dd className="font-semibold tabular-nums">−{formatINR(discount)}</dd>
+              </div>
+            </>
+          )}
           <div className="flex items-baseline justify-between gap-4 border-t border-ink/10 pt-3">
             <dt className="font-semibold">Total</dt>
             <dd className="font-display text-2xl font-extrabold">{formatINR(total)}</dd>

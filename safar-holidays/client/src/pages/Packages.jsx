@@ -7,6 +7,7 @@ import { useApi } from '../lib/api.js';
 import { CATEGORY_LABELS } from '../lib/format.js';
 
 const FILTER_KEYS = ['search', 'region', 'category', 'maxPrice', 'maxDays', 'sort'];
+const PAGE_SIZE = 6;
 
 const BUDGETS = [
   ['', 'Any budget'],
@@ -90,7 +91,11 @@ export default function Packages() {
   }
 
   const query = new URLSearchParams(FILTER_KEYS.filter((k) => get(k)).map((k) => [k, get(k)])).toString();
-  const { data, error, loading, reload } = useApi(`/packages${query ? `?${query}` : ''}`);
+  // "Load more" pagination: show PAGE_SIZE trips, then PAGE_SIZE more on each click.
+  const [pages, setPages] = useState(1);
+  useEffect(() => setPages(1), [query]);
+  const limitQuery = `limit=${PAGE_SIZE * pages}`;
+  const { data, error, loading, reload } = useApi(`/packages?${query ? `${query}&` : ''}${limitQuery}`);
   const meta = useApi('/packages/meta');
   const activeFilters = FILTER_KEYS.filter((k) => k !== 'sort' && get(k)).length;
 
@@ -225,6 +230,13 @@ export default function Packages() {
               {data.packages.map((p) => (
                 <PackageCard key={p.id} pkg={p} />
               ))}
+            </div>
+          )}
+          {data?.hasMore && (
+            <div className="mt-10 text-center">
+              <button className="btn-ghost" onClick={() => setPages((n) => n + 1)} disabled={loading}>
+                {loading ? 'Loading…' : `Load more trips (${data.total - data.count} left)`}
+              </button>
             </div>
           )}
         </section>

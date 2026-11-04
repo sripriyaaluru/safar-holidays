@@ -247,3 +247,164 @@ describe('admin', () => {
     assert.equal(res.data.status, 'resolved');
   });
 });
+
+describe('new features: coupons, payments, refunds, notifications, profile', () => {
+  let token;
+  let adminToken;
+  let bookingId;
+  const travelDate = todayISO(45);
+
+  before(async () => {
+    const reg = await api('/auth/register', {
+      method: 'POST',
+      body: { name: 'Feature Tester', email: 'feature@example.com', password: 'secret123', phone: '9000000001' },
+    });
+    token = reg.data.token;
+    adminToken = (await api('/auth/login', { method: 'POST', body: { email: 'admin@example.com', password: 'Admin@123' } })).data.token;
+  });
+
+  test('lists current offers and hides expired coupons', async () => {
+    const { data } = await api('/coupons');
+    const codes = data.coupons.map((c) => c.code);
+    assert.ok(codes.includes('WELCOME10'));
+    assert.ok(!codes.includes('DIWALI2025'));
+  });
+
+  test('quotes a coupon and rejects one below the minimum amount', async () => {
+    const ok = await api('/bookings/quote', { method: 'POST', token, body: { package_id: 3, adults: 2, coupon_code: 'welcome10' } });
+    assert.equal(ok.status, 200);
+    assert.equal(ok.data.discount, Math.round(21499 * 2 * 0.1));
+    const low = await api('/bookings/quote', { method: 'POST', token, body: { package_id: 3, adults: 2, coupon_code: 'FAMILY15' } });
+    assert.equal(low.status, 400);
+    assert.match(low.data.error, /at least/);
+    const expired = await api('/bookings/quote', { method: 'POST', token, body: { package_id: 3, adults: 2, coupon_code: 'DIWALI2025' } });
+    assert.equal(expired.status, 400);
+  });
+
+  test('books with a coupon and blocks a duplicate booking', async () => {
+    const body = { package_id: 3, travel_date: travelDate, adults: 2, contact_phone: '9000000001', coupon_code: 'WELCOME10' };
+    const { status, data } = await api('/bookings', { method: 'POST', token, body });
+    assert.equal(status, 201);
+    assert.equal(data.booking.discount_amount, 4300);
+    assert.equal(data.booking.total_amount, 21499 * 2 - 4300);
+    bookingId = data.booking.id;
+    const dup = await api('/bookings', { method: 'POST', token, body: { ...body, coupon_code: '' } });
+    assert.equal(dup.status, 409);
+  });
+
+  test('cannot pay before the booking is confirmed', async () => {
+    const res = await api(`/bookings/${bookingId}/pay`, { method: 'POST', token, body: { method: 'upi', upi_id: 'tester@okaxis' } });
+    assert.equal(res.status, 400);
+  });
+
+  test('validates cards, declines the test card and accepts a good card', async () => {
+    await api(`/admin/bookings/${bookingId}`, { method: 'PATCH', token: adminToken, body: { status: 'confirmed' } });
+    const card = { method: 'card', card_name: 'Feature Tester', expiry: '12/39', cvv: '123' };
+    const badLuhn = await api(`/bookings/${bookingId}/pay`, { method: 'POST', token, body: { ...card, card_number: '4111 1111 1111 1112' } });
+    assert.equal(badLuhn.status, 400);
+    const declined = await api(`/bookings/${bookingId}/pay`, { method: 'POST', token, body: { ...card, card_number: '4000 0000 0000 0002' } });
+    assert.equal(declined.status, 402);
+    const paid = await api(`/bookings/${bookingId}/pay`, { method: 'POST', token, body: { ...card, card_number: '4111 1111 1111 1111' } });
+    assert.equal(paid.status, 201);
+    assert.equal(paid.data.booking.payment_status, 'paid');
+    const detail = await api(`/bookings/${bookingId}`, { token });
+    assert.equal(detail.data.payments.length, 1);
+    assert.equal(detail.data.refundQuote.percent, 100);
+  });
+
+  test('refunds in full when cancelled 30+ days ahead', async () => {
+    const { data } = await api(`/bookings/${bookingId}/cancel`, { method: 'PATCH', token });
+    assert.equal(data.booking.status, 'cancelled');
+    assert.equal(data.refund.percent, 100);
+    assert.equal(data.booking.payment_status, 'refunded');
+    assert.equal(data.booking.refund_amount, 21499 * 2 - 4300);
+  });
+
+  test('creates notifications and marks them read', async () => {
+    const { data } = await api('/notifications', { token });
+    assert.ok(data.notifications.length >= 4);
+    assert.ok(data.unread > 0);
+    const after = await api('/notifications/read-all', { method: 'POST', token });
+    assert.equal(after.data.unread, 0);
+  });
+
+  test('updates profile and changes password with rules', async () => {
+    const prof = await api('/auth/me', { method: 'PUT', token, body: { name: 'Feature T', phone: '9000000002' } });
+    assert.equal(prof.data.user.name, 'Feature T');
+    const weak = await api('/auth/password', { method: 'PUT', token, body: { current_password: 'secret123', new_password: 'short' } });
+    assert.equal(weak.status, 400);
+    const wrong = await api('/auth/password', { method: 'PUT', token, body: { current_password: 'nope', new_password: 'Better123' } });
+    assert.equal(wrong.status, 400);
+    const ok = await api('/auth/password', { method: 'PUT', token, body: { current_password: 'secret123', new_password: 'Better123' } });
+    assert.equal(ok.status, 200);
+    const login = await api('/auth/login', { method: 'POST', body: { email: 'feature@example.com', password: 'Better123' } });
+    assert.equal(login.status, 200);
+  });
+
+  test('newsletter sign-up is idempotent', async () => {
+    const first = await api('/newsletter', { method: 'POST', body: { email: 'news@example.com' } });
+    assert.equal(first.status, 201);
+    const again = await api('/newsletter', { method: 'POST', body: { email: 'NEWS@example.com' } });
+    assert.equal(again.status, 200);
+    const bad = await api('/newsletter', { method: 'POST', body: { email: 'not-an-email' } });
+    assert.equal(bad.status, 400);
+  });
+
+  test('compares packages and paginates the list', async () => {
+    const cmp = await api('/packages/compare?ids=7,1,8');
+    assert.deepEqual(cmp.data.packages.map((p) => p.id), [7, 1, 8]);
+    const page = await api('/packages?limit=5&offset=5&sort=price_asc');
+    assert.equal(page.data.count, 5);
+    assert.ok(page.data.total >= 10);
+    assert.equal(page.data.hasMore, true);
+  });
+
+  test('package detail includes similar trips and a rating breakdown', async () => {
+    const { data } = await api('/packages/goa-beach-escape');
+    assert.ok(data.similar.length > 0 && data.similar.every((p) => p.slug !== 'goa-beach-escape'));
+    assert.equal(data.ratingBreakdown.length, 5);
+  });
+
+  test('admin manages coupons, exports CSV and sees extended stats', async () => {
+    const created = await api('/admin/coupons', {
+      method: 'POST',
+      token: adminToken,
+      body: { code: 'test50', discount_type: 'flat', discount_value: 50, description: 'Test' },
+    });
+    assert.equal(created.status, 201);
+    assert.equal(created.data.coupon.code, 'TEST50');
+    const tooBig = await api('/admin/coupons', {
+      method: 'POST',
+      token: adminToken,
+      body: { code: 'HUGE', discount_type: 'percent', discount_value: 95 },
+    });
+    assert.equal(tooBig.status, 400);
+    const del = await api(`/admin/coupons/${created.data.coupon.id}`, { method: 'DELETE', token: adminToken });
+    assert.equal(del.data.deleted, true);
+
+    const res = await fetch(`${base}/admin/bookings.csv`, { headers: { Authorization: `Bearer ${adminToken}` } });
+    assert.equal(res.status, 200);
+    assert.match(res.headers.get('content-type'), /text\/csv/);
+    assert.match(await res.text(), /Booking ref,Customer/);
+
+    const stats = await api('/admin/stats', { token: adminToken });
+    assert.equal(stats.data.monthly.length, 6);
+    assert.ok(stats.data.payments.paid > 0);
+    const subs = await api('/admin/subscribers', { token: adminToken });
+    assert.ok(subs.data.subscribers.length >= 4);
+  });
+
+  test('sends security headers', async () => {
+    const res = await fetch(`${base}/health`);
+    assert.equal(res.headers.get('x-content-type-options'), 'nosniff');
+    assert.equal(res.headers.get('x-frame-options'), 'DENY');
+  });
+
+  test('locks login after repeated failures', async () => {
+    let last;
+    for (let i = 0; i < 9; i++) {
+      last = await api('/auth/login', { method: 'POST', body: { email: 'priya@example.com', password: 'wrong-password' } });
+    }
+    assert.equal(last.status, 429);
+  });
+});

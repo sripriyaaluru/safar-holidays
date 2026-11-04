@@ -85,3 +85,24 @@ export function useApi(path) {
 
   return { ...state, reload, setData };
 }
+
+/** Downloads a file (such as a CSV export) from a protected API route. */
+export async function download(path, filename) {
+  const token = tokenStore.get();
+  const res = await fetch(`${API_BASE}/api${path}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || `Download failed with status ${res.status}`);
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}

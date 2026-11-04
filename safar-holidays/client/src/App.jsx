@@ -1,9 +1,16 @@
 import { useEffect } from 'react';
 import { Outlet, Route, Routes, useLocation } from 'react-router';
+import CompareBar from './components/CompareBar.jsx';
 import Footer from './components/Footer.jsx';
 import Navbar from './components/Navbar.jsx';
 import RequireAuth from './components/RequireAuth.jsx';
+import About from './pages/About.jsx';
+import Compare from './pages/Compare.jsx';
 import Contact from './pages/Contact.jsx';
+import FAQ from './pages/FAQ.jsx';
+import Invoice from './pages/Invoice.jsx';
+import Payment from './pages/Payment.jsx';
+import Profile from './pages/Profile.jsx';
 import Home from './pages/Home.jsx';
 import Login from './pages/Login.jsx';
 import MyTrips from './pages/MyTrips.jsx';
@@ -13,6 +20,8 @@ import Packages from './pages/Packages.jsx';
 import Register from './pages/Register.jsx';
 import Saved from './pages/Saved.jsx';
 import AdminBookings from './pages/admin/AdminBookings.jsx';
+import AdminCoupons from './pages/admin/AdminCoupons.jsx';
+import AdminSubscribers from './pages/admin/AdminSubscribers.jsx';
 import AdminEnquiries from './pages/admin/AdminEnquiries.jsx';
 import AdminLayout from './pages/admin/AdminLayout.jsx';
 import AdminOverview from './pages/admin/AdminOverview.jsx';
@@ -38,6 +47,7 @@ function SiteLayout() {
         <Outlet />
       </main>
       <Footer />
+      <CompareBar />
     </div>
   );
 }
@@ -49,6 +59,9 @@ export default function App() {
         <Route index element={<Home />} />
         <Route path="packages" element={<Packages />} />
         <Route path="packages/:slug" element={<PackageDetail />} />
+        <Route path="compare" element={<Compare />} />
+        <Route path="about" element={<About />} />
+        <Route path="faq" element={<FAQ />} />
         <Route path="contact" element={<Contact />} />
         <Route path="login" element={<Login />} />
         <Route path="register" element={<Register />} />
@@ -57,6 +70,30 @@ export default function App() {
           element={
             <RequireAuth>
               <MyTrips />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="trips/:id/pay"
+          element={
+            <RequireAuth>
+              <Payment />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="trips/:id/invoice"
+          element={
+            <RequireAuth>
+              <Invoice />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="profile"
+          element={
+            <RequireAuth>
+              <Profile />
             </RequireAuth>
           }
         />
@@ -81,8 +118,10 @@ export default function App() {
           <Route path="packages" element={<AdminPackages />} />
           <Route path="packages/new" element={<AdminPackageForm />} />
           <Route path="packages/:id/edit" element={<AdminPackageForm />} />
+          <Route path="coupons" element={<AdminCoupons />} />
           <Route path="enquiries" element={<AdminEnquiries />} />
           <Route path="users" element={<AdminUsers />} />
+          <Route path="subscribers" element={<AdminSubscribers />} />
         </Route>
         <Route path="*" element={<NotFound />} />
       </Route>

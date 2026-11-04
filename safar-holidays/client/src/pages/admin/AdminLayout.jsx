@@ -1,12 +1,14 @@
-import { Inbox, LayoutDashboard, Luggage, Ticket, Users } from 'lucide-react';
+import { Inbox, LayoutDashboard, Luggage, Mail, Ticket, TicketPercent, Users } from 'lucide-react';
 import { NavLink, Outlet } from 'react-router';
 
 const NAV = [
   { to: '/admin', label: 'Overview', icon: LayoutDashboard, end: true },
   { to: '/admin/bookings', label: 'Bookings', icon: Ticket },
   { to: '/admin/packages', label: 'Packages', icon: Luggage },
+  { to: '/admin/coupons', label: 'Coupons', icon: TicketPercent },
   { to: '/admin/enquiries', label: 'Enquiries', icon: Inbox },
   { to: '/admin/users', label: 'Customers', icon: Users },
+  { to: '/admin/subscribers', label: 'Subscribers', icon: Mail },
 ];
 
 export default function AdminLayout() {

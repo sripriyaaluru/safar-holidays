@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Menu, X } from 'lucide-react';
-import { NavLink, useLocation, useNavigate } from 'react-router';
+import { CircleUserRound, Menu, X } from 'lucide-react';
+import { Link, NavLink, useLocation, useNavigate } from 'react-router';
 import { useAuth } from '../context/AuthContext.jsx';
+import AccessibilityMenu from './AccessibilityMenu.jsx';
 import Logo from './Logo.jsx';
+import NotificationBell from './NotificationBell.jsx';
 
 const linkClass = ({ isActive }) =>
   `rounded-full px-3 py-2 text-[15px] font-semibold transition-colors ${
@@ -21,7 +23,8 @@ export default function Navbar() {
 
   const links = [
     { to: '/packages', label: 'Packages' },
-    ...(user ? [{ to: '/saved', label: 'Saved' }, { to: '/trips', label: 'My trips' }] : []),
+    ...(user ? [{ to: '/saved', label: 'Saved' }, { to: '/trips', label: 'My trips' }] : [{ to: '/about', label: 'About' }]),
+    { to: '/faq', label: 'FAQ' },
     { to: '/contact', label: 'Contact' },
     ...(user?.role === 'admin' ? [{ to: '/admin', label: 'Admin' }] : []),
   ];
@@ -44,10 +47,18 @@ export default function Navbar() {
           ))}
         </div>
 
-        <div className="hidden items-center gap-2 md:flex">
+        <div className="hidden items-center gap-1 md:flex">
+          <AccessibilityMenu />
           {user ? (
             <>
-              <span className="text-sm text-slate">Hi, {user.name.split(' ')[0]}</span>
+              <NotificationBell />
+              <Link
+                to="/profile"
+                className="flex items-center gap-1.5 rounded-full px-2 py-2 text-sm font-semibold text-ink-soft hover:bg-mist hover:text-ink"
+              >
+                <CircleUserRound className="size-5" aria-hidden />
+                {user.name.split(' ')[0]}
+              </Link>
               <button onClick={handleLogout} className="btn-ghost py-2">
                 Log out
               </button>
@@ -64,6 +75,9 @@ export default function Navbar() {
           )}
         </div>
 
+        <div className="flex items-center gap-1 md:hidden">
+          <AccessibilityMenu />
+          {user && <NotificationBell />}
         <button
           className="grid size-10 place-items-center rounded-full hover:bg-mist md:hidden"
           onClick={() => setOpen((o) => !o)}
@@ -73,6 +87,7 @@ export default function Navbar() {
         >
           {open ? <X className="size-6" /> : <Menu className="size-6" />}
         </button>
+        </div>
       </nav>
 
       {open && (
@@ -85,9 +100,14 @@ export default function Navbar() {
             ))}
             <div className="mt-2 flex gap-2 border-t border-line pt-3">
               {user ? (
-                <button onClick={handleLogout} className="btn-ghost flex-1">
-                  Log out
-                </button>
+                <>
+                  <NavLink to="/profile" className="btn-ghost flex-1">
+                    My profile
+                  </NavLink>
+                  <button onClick={handleLogout} className="btn-ghost flex-1">
+                    Log out
+                  </button>
+                </>
               ) : (
                 <>
                   <NavLink to="/login" className="btn-ghost flex-1">

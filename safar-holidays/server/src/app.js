@@ -7,6 +7,10 @@ import { config } from './config.js';
 import adminRoutes from './routes/admin.js';
 import authRoutes from './routes/auth.js';
 import bookingRoutes from './routes/bookings.js';
+import couponRoutes from './routes/coupons.js';
+import newsletterRoutes from './routes/newsletter.js';
+import notificationRoutes from './routes/notifications.js';
+import { securityHeaders } from './middleware/security.js';
 import enquiryRoutes from './routes/enquiries.js';
 import packageRoutes from './routes/packages.js';
 import wishlistRoutes from './routes/wishlist.js';
@@ -16,6 +20,7 @@ export function createApp() {
   const app = express();
 
   app.disable('x-powered-by');
+  app.use(securityHeaders);
   app.use(cors({ origin: config.clientOrigin.split(',') }));
   app.use(express.json({ limit: '1mb' }));
 
@@ -26,6 +31,9 @@ export function createApp() {
   app.use('/api/bookings', bookingRoutes);
   app.use('/api/wishlist', wishlistRoutes);
   app.use('/api/enquiries', enquiryRoutes);
+  app.use('/api/coupons', couponRoutes);
+  app.use('/api/newsletter', newsletterRoutes);
+  app.use('/api/notifications', notificationRoutes);
   app.use('/api/admin', adminRoutes);
   app.use('/api', (_req, res) => res.status(404).json({ error: 'API route not found.' }));
 

@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { EmptyState, ErrorState, Loader } from '../../components/States.jsx';
 import { useToast } from '../../context/ToastContext.jsx';
-import { api, useApi } from '../../lib/api.js';
-import { STATUS_STYLES, formatDate, formatINR } from '../../lib/format.js';
+import { Download } from 'lucide-react';
+import { api, download, useApi } from '../../lib/api.js';
+import { PAYMENT_STYLES, STATUS_STYLES, dateFromToday, formatDate, formatINR } from '../../lib/format.js';
 
 const TABS = ['', 'pending', 'confirmed', 'completed', 'cancelled'];
 
@@ -11,6 +12,7 @@ export default function AdminBookings() {
   const toast = useToast();
   const [params, setParams] = useSearchParams();
   const status = params.get('status') || '';
+  const payment = params.get('payment') || '';
   const [search, setSearch] = useState('');
   const [debounced, setDebounced] = useState('');
 
@@ -19,15 +21,36 @@ export default function AdminBookings() {
     return () => clearTimeout(t);
   }, [search]);
 
-  const query = new URLSearchParams(Object.entries({ status, search: debounced }).filter(([, v]) => v)).toString();
+  const query = new URLSearchParams(Object.entries({ status, payment, search: debounced }).filter(([, v]) => v)).toString();
+
+  async function exportCsv() {
+    try {
+      await download(`/admin/bookings.csv${query ? `?${query}` : ''}`, `bookings-${dateFromToday(0)}.csv`);
+      toast('Bookings exported');
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  }
+
+  function setFilter(key, value) {
+    setParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (value) next.set(key, value);
+        else next.delete(key);
+        return next;
+      },
+      { replace: true },
+    );
+  }
   const { data, error, loading, reload, setData } = useApi(`/admin/bookings${query ? `?${query}` : ''}`);
 
   async function changeStatus(booking, newStatus) {
     try {
-      await api(`/admin/bookings/${booking.id}`, { method: 'PATCH', body: { status: newStatus } });
+      const res = await api(`/admin/bookings/${booking.id}`, { method: 'PATCH', body: { status: newStatus } });
       setData((d) => ({
         ...d,
-        bookings: d.bookings.map((b) => (b.id === booking.id ? { ...b, status: newStatus } : b)),
+        bookings: d.bookings.map((b) => (b.id === booking.id ? { ...b, ...res } : b)),
       }));
       toast(`${booking.booking_ref} marked as ${STATUS_STYLES[newStatus].short.toLowerCase()}`);
     } catch (err) {
@@ -44,7 +67,7 @@ export default function AdminBookings() {
               key={t || 'all'}
               role="tab"
               aria-selected={status === t}
-              onClick={() => setParams(t ? { status: t } : {}, { replace: true })}
+              onClick={() => setFilter('status', t)}
               className={`rounded-full border px-3.5 py-1.5 text-sm font-semibold ${
                 status === t ? 'border-ink bg-ink text-white' : 'border-line bg-white hover:border-ink'
               }`}
@@ -53,7 +76,17 @@ export default function AdminBookings() {
             </button>
           ))}
         </div>
-        <label className="w-full sm:w-64">
+        <div className="flex w-full flex-wrap gap-2 sm:w-auto">
+        <label>
+          <span className="sr-only">Payment</span>
+          <select className="field py-2" value={payment} onChange={(e) => setFilter('payment', e.target.value)}>
+            <option value="">Any payment</option>
+            <option value="unpaid">Not paid</option>
+            <option value="paid">Paid</option>
+            <option value="refunded">Refunded</option>
+          </select>
+        </label>
+        <label className="min-w-0 flex-1 sm:w-56">
           <span className="sr-only">Search bookings</span>
           <input
             type="search"
@@ -63,6 +96,11 @@ export default function AdminBookings() {
             onChange={(e) => setSearch(e.target.value)}
           />
         </label>
+        <button className="btn-ghost py-2" onClick={exportCsv}>
+          <Download className="size-4" aria-hidden />
+          CSV
+        </button>
+        </div>
       </div>
 
       <div className="mt-5">
@@ -71,7 +109,7 @@ export default function AdminBookings() {
         {data && data.bookings.length === 0 && <EmptyState title="No bookings match">Try another status or search.</EmptyState>}
         {data && data.bookings.length > 0 && (
           <div className="overflow-x-auto rounded-2xl border border-line bg-white">
-            <table className="w-full min-w-[860px] text-left text-[15px]">
+            <table className="w-full min-w-[980px] text-left text-[15px]">
               <thead className="border-b border-line text-sm text-slate">
                 <tr>
                   <th className="px-4 py-3 font-semibold">Booking</th>
@@ -80,6 +118,7 @@ export default function AdminBookings() {
                   <th className="px-4 py-3 font-semibold">Travel date</th>
                   <th className="px-4 py-3 font-semibold">People</th>
                   <th className="px-4 py-3 text-right font-semibold">Amount</th>
+                  <th className="px-4 py-3 font-semibold">Payment</th>
                   <th className="px-4 py-3 font-semibold">Status</th>
                 </tr>
               </thead>
@@ -107,7 +146,14 @@ export default function AdminBookings() {
                     <td className="px-4 py-3 tabular-nums">
                       {b.adults}A{b.children > 0 && ` + ${b.children}C`}
                     </td>
-                    <td className="px-4 py-3 text-right tabular-nums">{formatINR(b.total_amount)}</td>
+                    <td className="px-4 py-3 text-right tabular-nums">
+                      {formatINR(b.total_amount)}
+                      {b.coupon_code && <p className="text-xs text-leaf">{b.coupon_code}</p>}
+                    </td>
+                    <td className={`px-4 py-3 text-sm font-semibold ${(PAYMENT_STYLES[b.payment_status] || PAYMENT_STYLES.unpaid).className}`}>
+                      {(PAYMENT_STYLES[b.payment_status] || PAYMENT_STYLES.unpaid).label}
+                      {b.refund_amount > 0 && <p className="text-xs font-normal">{formatINR(b.refund_amount)} back</p>}
+                    </td>
                     <td className="px-4 py-3">
                       <label>
                         <span className="sr-only">Status for {b.booking_ref}</span>

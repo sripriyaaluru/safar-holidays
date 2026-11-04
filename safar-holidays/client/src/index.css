@@ -129,6 +129,46 @@
   }
 }
 
+/* ---------- Accessibility settings (see AccessibilityMenu.jsx) ---------- */
+html[data-text-size="large"] body {
+  zoom: 1.12;
+}
+html[data-text-size="xlarge"] body {
+  zoom: 1.25;
+}
+html.high-contrast {
+  --color-ink: #000814;
+  --color-ink-soft: #0b1426;
+  --color-slate: #1f2937;
+  --color-line: #4b5563;
+  --color-peacock: #00585c;
+  --color-sindoor: #8f1d14;
+  --color-leaf: #1b5e35;
+  --color-marigold-deep: #8a5800;
+}
+html.high-contrast body {
+  background: #ffffff;
+}
+html.underline-links a {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* ---------- Print (invoice page) ---------- */
+@media print {
+  header,
+  footer,
+  .no-print {
+    display: none !important;
+  }
+  body {
+    background: #fff;
+  }
+  main {
+    padding: 0 !important;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

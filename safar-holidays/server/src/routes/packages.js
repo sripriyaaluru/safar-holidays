@@ -20,6 +20,7 @@ const listQuery = z.object({
   featured: z.enum(['1', 'true']).optional(),
   sort: z.enum(['popular', 'price_asc', 'price_desc', 'duration', 'rating']).default('popular'),
   limit: z.coerce.number().int().min(1).max(50).optional(),
+  offset: z.coerce.number().int().min(0).default(0),
 });
 
 const SORTS = {
@@ -63,10 +64,28 @@ router.get('/', (req, res) => {
   if (q.featured) where.push('p.featured = 1');
 
   let sql = `${PACKAGE_SELECT} WHERE ${where.join(' AND ')} ORDER BY ${SORTS[q.sort]}`;
-  if (q.limit) sql += ` LIMIT ${q.limit}`;
+  if (q.limit) sql += ` LIMIT ${q.limit} OFFSET ${q.offset}`;
 
+  const { total } = db.prepare(`SELECT COUNT(*) AS total FROM packages p WHERE ${where.join(' AND ')}`).get(params);
   const packages = db.prepare(sql).all(params).map(toCard);
-  res.json({ packages, count: packages.length });
+  res.json({ packages, count: packages.length, total, hasMore: q.offset + packages.length < total });
+});
+
+/* ---------- Public: compare up to 3 packages side by side ---------- */
+
+router.get('/compare', (req, res) => {
+  const ids = String(req.query.ids || '')
+    .split(',')
+    .map(Number)
+    .filter((n) => Number.isInteger(n) && n > 0)
+    .slice(0, 3);
+  if (ids.length === 0) return res.json({ packages: [] });
+  const rows = db
+    .prepare(`${PACKAGE_SELECT} WHERE p.is_active = 1 AND p.id IN (${ids.map(() => '?').join(',')})`)
+    .all(...ids);
+  // Keep the order the user picked
+  const packages = ids.map((id) => rows.find((r) => r.id === id)).filter(Boolean).map(toDetail);
+  res.json({ packages });
 });
 
 /* ---------- Public: filter options (categories, price range) ---------- */
@@ -87,7 +106,8 @@ router.get('/meta', (_req, res) => {
         ORDER BY r.created_at DESC LIMIT 3`,
     )
     .all();
-  res.json({ categories, ...range, recentReviews: reviews });
+  const ratings = db.prepare(`SELECT ROUND(COALESCE(AVG(rating), 0), 1) AS avgRating, COUNT(*) AS reviewCount FROM reviews`).get();
+  res.json({ categories, ...range, ...ratings, recentReviews: reviews });
 });
 
 /* ---------- Public: one package with reviews ---------- */
@@ -118,7 +138,22 @@ router.get('/:slug', optionalAuth, (req, res) => {
     };
   }
 
-  res.json({ package: toDetail(row), reviews, viewer });
+  // Similar trips: same trip type first, then same region, never the package itself.
+  const similar = db
+    .prepare(
+      `${PACKAGE_SELECT} WHERE p.is_active = 1 AND p.id != @id AND (p.category = @category OR p.region = @region)
+       ORDER BY CASE WHEN p.category = @category THEN 0 ELSE 1 END, ABS(p.price - @price) LIMIT 3`,
+    )
+    .all({ id: row.id, category: row.category, region: row.region, price: row.price })
+    .map(toCard);
+
+  // Rating breakdown: how many 5-star, 4-star ... reviews
+  const ratingBreakdown = [5, 4, 3, 2, 1].map((stars) => ({
+    stars,
+    count: reviews.filter((r) => r.rating === stars).length,
+  }));
+
+  res.json({ package: toDetail(row), reviews, viewer, similar, ratingBreakdown });
 });
 
 /* ---------- Logged-in users: review a package they booked ---------- */
@@ -232,6 +267,24 @@ router.put('/:id', requireAdmin, (req, res) => {
   ).run(row);
   const updated = db.prepare(`${PACKAGE_SELECT} WHERE p.id = ?`).get(id);
   res.json({ package: toDetail(updated) });
+});
+
+router.post('/:id/duplicate', requireAdmin, (req, res) => {
+  const id = idParam(req.params.id, 'package id');
+  const src = db.prepare('SELECT * FROM packages WHERE id = ?').get(id);
+  if (!src) throw new HttpError(404, 'Package not found.');
+  const title = `${src.title} (copy)`.slice(0, 120);
+  const { lastInsertRowid } = db
+    .prepare(
+      `INSERT INTO packages (slug, title, destination, country, region, category, duration_days, price, image_url,
+         summary, description, highlights, itinerary, inclusions, exclusions, max_group_size, featured, is_active)
+       SELECT ?, ?, destination, country, region, category, duration_days, price, image_url,
+         summary, description, highlights, itinerary, inclusions, exclusions, max_group_size, 0, 0
+         FROM packages WHERE id = ?`,
+    )
+    .run(uniqueSlug(title), title, id);
+  const created = db.prepare(`${PACKAGE_SELECT} WHERE p.id = ?`).get(lastInsertRowid);
+  res.status(201).json({ package: toDetail(created), message: 'Copy created as a hidden draft.' });
 });
 
 router.delete('/:id', requireAdmin, (req, res) => {

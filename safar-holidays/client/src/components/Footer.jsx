@@ -1,11 +1,12 @@
 import { Link } from 'react-router';
 import Logo from './Logo.jsx';
+import NewsletterForm from './NewsletterForm.jsx';
 
 export default function Footer() {
   return (
     <footer className="mt-24 bg-ink text-white/80">
-      <div className="container-page grid gap-10 py-14 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="sm:col-span-2">
+      <div className="container-page grid gap-10 py-14 sm:grid-cols-2 lg:grid-cols-[1.3fr_1fr_1fr_1.3fr]">
+        <div>
           <Logo light />
           <p className="mt-4 max-w-sm text-[15px]">
             Hand-planned holidays across India and abroad. One team looks after your trip from the first enquiry to
@@ -18,6 +19,9 @@ export default function Footer() {
             <li><Link className="hover:text-white" to="/packages?region=domestic">Trips in India</Link></li>
             <li><Link className="hover:text-white" to="/packages?region=international">International trips</Link></li>
             <li><Link className="hover:text-white" to="/packages?category=honeymoon">Honeymoon packages</Link></li>
+            <li><Link className="hover:text-white" to="/compare">Compare trips</Link></li>
+            <li><Link className="hover:text-white" to="/about">About us</Link></li>
+            <li><Link className="hover:text-white" to="/faq">FAQ and policies</Link></li>
             <li><Link className="hover:text-white" to="/contact">Plan a custom trip</Link></li>
           </ul>
         </div>
@@ -30,6 +34,7 @@ export default function Footer() {
             <li>MG Road, Bengaluru</li>
           </ul>
         </div>
+        <NewsletterForm />
       </div>
       <div className="border-t border-white/10">
         <p className="container-page py-5 text-sm text-white/60">

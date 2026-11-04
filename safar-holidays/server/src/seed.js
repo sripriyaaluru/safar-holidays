@@ -4,25 +4,35 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import bcrypt from 'bcryptjs';
 import { todayISO } from './utils/http.js';
+import { couponDiscount } from './utils/bookings.js';
 import { calculateTotal, slugify } from './utils/packages.js';
 import { samplePackages, sampleReviews, sampleUsers } from './seed-data.js';
 
 const at = (daysOffset, time = '10:30:00') => `${todayISO(daysOffset)} ${time}`;
 
-// [user email, package title, status, travel date offset, created offset, adults, children]
+// [user email, package title, status, travel date offset, created offset, adults, children, paid, coupon]
 const sampleBookings = [
-  ['priya@example.com', 'Kerala Backwaters & Hills', 'completed', -60, -95, 2, 0],
-  ['rahul@example.com', 'Kerala Backwaters & Hills', 'completed', -30, -70, 2, 1],
-  ['ananya@example.com', 'Golden Triangle Classic', 'completed', -45, -100, 2, 0],
-  ['priya@example.com', 'Goa Beach Escape', 'completed', -20, -50, 4, 0],
-  ['rahul@example.com', 'Dubai City Lights', 'completed', -15, -60, 3, 0],
-  ['ananya@example.com', 'Bali Island Retreat', 'completed', -10, -40, 2, 0],
-  ['priya@example.com', 'Singapore Family Fun', 'confirmed', 25, -10, 2, 2],
-  ['priya@example.com', 'Golden Triangle Classic', 'confirmed', 60, -3, 2, 0],
-  ['rahul@example.com', 'Andaman Island Hopper', 'pending', 40, -2, 2, 0],
-  ['ananya@example.com', 'Royal Rajasthan', 'pending', 30, -1, 3, 0],
-  ['rahul@example.com', 'Maldives Overwater Stay', 'cancelled', 50, -5, 2, 0],
+  ['priya@example.com', 'Kerala Backwaters & Hills', 'completed', -60, -150, 2, 0, true, ''],
+  ['rahul@example.com', 'Kerala Backwaters & Hills', 'completed', -30, -125, 2, 1, true, ''],
+  ['ananya@example.com', 'Golden Triangle Classic', 'completed', -45, -100, 2, 0, true, ''],
+  ['priya@example.com', 'Goa Beach Escape', 'completed', -20, -80, 4, 0, true, 'WELCOME10'],
+  ['rahul@example.com', 'Dubai City Lights', 'completed', -15, -60, 3, 0, true, ''],
+  ['ananya@example.com', 'Bali Island Retreat', 'completed', -10, -40, 2, 0, true, 'MONSOON5K'],
+  ['priya@example.com', 'Singapore Family Fun', 'confirmed', 25, -10, 2, 2, true, ''],
+  ['priya@example.com', 'Golden Triangle Classic', 'confirmed', 60, -3, 2, 0, false, ''],
+  ['rahul@example.com', 'Andaman Island Hopper', 'pending', 40, -2, 2, 0, false, ''],
+  ['ananya@example.com', 'Royal Rajasthan', 'pending', 30, -1, 3, 0, false, ''],
+  ['rahul@example.com', 'Maldives Overwater Stay', 'cancelled', 50, -5, 2, 0, false, ''],
 ];
+
+const sampleCoupons = [
+  { code: 'WELCOME10', description: '10% off your first trip with us (up to ₹5,000)', discount_type: 'percent', discount_value: 10, min_amount: 10000, max_discount: 5000, valid_days: 365, usage_limit: 0 },
+  { code: 'MONSOON5K', description: 'Flat ₹5,000 off any booking above ₹80,000', discount_type: 'flat', discount_value: 5000, min_amount: 80000, max_discount: 0, valid_days: 90, usage_limit: 100 },
+  { code: 'FAMILY15', description: '15% off family holidays above ₹1,00,000 (up to ₹15,000)', discount_type: 'percent', discount_value: 15, min_amount: 100000, max_discount: 15000, valid_days: 180, usage_limit: 50 },
+  { code: 'DIWALI2025', description: 'Festive offer (expired)', discount_type: 'percent', discount_value: 20, min_amount: 0, max_discount: 8000, valid_days: -30, usage_limit: 0 },
+];
+
+const sampleSubscribers = ['priya@example.com', 'traveller.one@example.com', 'meera@example.com', 'karthik@example.com'];
 
 const sampleEnquiries = [
   {
@@ -40,12 +50,14 @@ const sampleEnquiries = [
     subject: 'Visa help for Bali',
     message: 'Do Indian passport holders need a visa for Bali, and do you help with the paperwork?',
     status: 'resolved',
+    admin_note: 'Replied by email with e-VOA details on the same day.',
   },
 ];
 
 export function seedDatabase(db) {
   const reset = () => {
     db.exec(`
+      DELETE FROM notifications; DELETE FROM payments; DELETE FROM coupons; DELETE FROM subscribers;
       DELETE FROM reviews; DELETE FROM wishlist; DELETE FROM bookings;
       DELETE FROM enquiries; DELETE FROM packages; DELETE FROM users;
       DELETE FROM sqlite_sequence;
@@ -86,11 +98,32 @@ export function seedDatabase(db) {
         special_requests, total_amount, status, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
-    sampleBookings.forEach(([email, title, status, travel, created, adults, children], i) => {
+    const insertCoupon = db.prepare(
+      `INSERT INTO coupons (code, description, discount_type, discount_value, min_amount, max_discount, valid_until, usage_limit, is_active, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    );
+    const coupons = {};
+    sampleCoupons.forEach((c, i) => {
+      insertCoupon.run(c.code, c.description, c.discount_type, c.discount_value, c.min_amount, c.max_discount,
+        todayISO(c.valid_days), c.usage_limit, c.valid_days > 0 ? 1 : 0, at(-160 + i));
+      coupons[c.code] = c;
+    });
+
+    const insertPayment = db.prepare(
+      `INSERT INTO payments (booking_id, amount, method, reference, transaction_id, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
+    );
+    const insertNote = db.prepare(
+      'INSERT INTO notifications (user_id, title, message, link, is_read, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+    );
+
+    sampleBookings.forEach(([email, title, status, travel, created, adults, children, paid, code], i) => {
       const user = sampleUsers.find((u) => u.email === email);
       const pkg = pkgs[title];
-      insertBooking.run(
-        `SFR-${(0xa1b200 + i * 4099).toString(16).toUpperCase()}`,
+      const subtotal = calculateTotal(pkg.price, adults, children);
+      const discount = code ? couponDiscount(coupons[code], subtotal) : 0;
+      const ref = `SFR-${(0xa1b200 + i * 4099).toString(16).toUpperCase()}`;
+      const { lastInsertRowid } = insertBooking.run(
+        ref,
         userIds[email],
         pkg.id,
         todayISO(travel),
@@ -98,11 +131,37 @@ export function seedDatabase(db) {
         children,
         user.phone,
         '',
-        calculateTotal(pkg.price, adults, children),
+        subtotal - discount,
         status,
         at(created),
       );
+      db.prepare('UPDATE bookings SET coupon_code = ?, discount_amount = ? WHERE id = ?').run(code, discount, lastInsertRowid);
+      if (status === 'cancelled') {
+        db.prepare('UPDATE bookings SET cancelled_at = ? WHERE id = ?').run(at(created + 1), lastInsertRowid);
+      }
+      if (paid) {
+        const paidAt = at(created + 2, '15:10:00');
+        db.prepare(`UPDATE bookings SET payment_status = 'paid', paid_at = ? WHERE id = ?`).run(paidAt, lastInsertRowid);
+        insertPayment.run(lastInsertRowid, subtotal - discount, i % 2 ? 'upi' : 'card',
+          i % 2 ? `UPI ${email.split('@')[0]}@okaxis` : 'Card ending 1111', `PAY-SEED${String(i).padStart(4, '0')}`, paidAt);
+      }
+      if (email === 'priya@example.com') {
+        insertNote.run(userIds[email], 'Booking received', `We received booking ${ref} for ${title}.`, '/trips', 1, at(created));
+        if (status !== 'pending') {
+          insertNote.run(userIds[email], 'Booking confirmed',
+            paid ? `${ref} is confirmed and paid. Have a great trip!` : `Good news! ${ref} is confirmed. You can now pay online from My trips.`,
+            '/trips', paid ? 1 : 0, at(created + 1));
+        }
+      }
     });
+
+    const insertWish = db.prepare('INSERT INTO wishlist (user_id, package_id, created_at) VALUES (?, ?, ?)');
+    ['Maldives Overwater Stay', 'Paris & Switzerland', 'Andaman Island Hopper'].forEach((title, i) =>
+      insertWish.run(userIds['priya@example.com'], pkgs[title].id, at(-6 + i)),
+    );
+
+    const insertSubscriber = db.prepare('INSERT INTO subscribers (email, created_at) VALUES (?, ?)');
+    sampleSubscribers.forEach((email, i) => insertSubscriber.run(email, at(-30 + i * 6)));
 
     const insertReview = db.prepare(
       'INSERT INTO reviews (user_id, package_id, rating, comment, created_at) VALUES (?, ?, ?, ?, ?)',
@@ -112,10 +171,10 @@ export function seedDatabase(db) {
     });
 
     const insertEnquiry = db.prepare(
-      'INSERT INTO enquiries (name, email, phone, subject, message, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      'INSERT INTO enquiries (name, email, phone, subject, message, status, admin_note, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
     );
     sampleEnquiries.forEach((e, i) => {
-      insertEnquiry.run(e.name, e.email, e.phone, e.subject, e.message, e.status, at(-4 + i * 2));
+      insertEnquiry.run(e.name, e.email, e.phone, e.subject, e.message, e.status, e.admin_note || '', at(-4 + i * 2));
     });
   };
 

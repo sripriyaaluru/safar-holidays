@@ -51,6 +51,9 @@ export function AuthProvider({ children }) {
     setUser(null);
   }, []);
 
+  /** Replaces the stored user after a profile update. */
+  const updateUser = useCallback((next) => setUser(next), []);
+
   /** Adds or removes a package from the wishlist. Returns the new saved state. */
   const toggleSaved = useCallback(
     async (packageId) => {
@@ -68,8 +71,8 @@ export function AuthProvider({ children }) {
   );
 
   const value = useMemo(
-    () => ({ user, ready, login, register, logout, savedIds, toggleSaved }),
-    [user, ready, login, register, logout, savedIds, toggleSaved],
+    () => ({ user, ready, login, register, logout, updateUser, savedIds, toggleSaved }),
+    [user, ready, login, register, logout, updateUser, savedIds, toggleSaved],
   );
 
   return <AuthContext value={value}>{children}</AuthContext>;

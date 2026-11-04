@@ -4,7 +4,7 @@ A full-stack travel agency website where customers can browse tour packages, sea
 save favourites, book trips and leave reviews, and where an admin manages packages, bookings,
 enquiries and customers from a dashboard.
 
-**Team:** Sripriya Aluru (roll no. 13)_ and Shruti Bhoi (roll no. 21)_
+**Team:** _Member 1 name (roll no.)_ and _Member 2 name (roll no.)_
 
 ---
 
@@ -23,7 +23,7 @@ enquiries and customers from a dashboard.
 | Database | **SQLite** via **node:sqlite** (built into Node.js) | Relational database stored in a single file: no database server or extra driver to install |
 | Security | **JWT** (jsonwebtoken) | Login tokens for authentication |
 | | **bcryptjs** | Password hashing (passwords are never stored as plain text) |
-| Testing | **Node.js built-in test runner** | 20 automated API tests |
+| Testing | **Node.js built-in test runner** | 34 automated API tests |
 | Tooling | **npm workspaces**, **concurrently** | One `npm install`, one command to run frontend and backend together |
 
 Architecture:
@@ -49,8 +49,28 @@ Architecture:
 - Contact form for custom trip enquiries
 - Fully responsive (works on phones)
 
+**New in version 2**
+- Coupon codes: apply in the booking panel, checked on the server (expiry, minimum amount, usage limit, once per customer); "Offers this month" on the home page
+- Online payment (simulated gateway) by card (Luhn check, expiry, CVV, declined test card) or UPI, after the admin confirms the booking
+- Printable tax invoice with GST breakdown, payment and refund transactions
+- Tiered cancellation refunds (100% / 75% / 50% / 0% depending on days before travel)
+- Notifications bell with unread count (booking received, confirmed, paid, cancelled)
+- Profile page: edit details, change password with strength meter, trip stats and traveller level (Explorer / Silver / Gold)
+- Compare up to 3 packages side by side (lowest price, best value per day, top rated highlighted)
+- Recently viewed trips, similar trips, rating breakdown, share button, cancellation policy on each package
+- "Load more" pagination on the package list
+- FAQ page with live search, About page
+- Newsletter sign-up in the footer
+- Accessibility menu: larger text, high contrast, underlined links (remembered on the device)
+- Security: login lockout after 8 failed attempts (429), security headers, duplicate-booking check
+
 **Admin**
-- Dashboard: confirmed revenue, bookings, customers, top packages, latest bookings
+- Dashboard: confirmed revenue, 6-month revenue chart, payments collected / due / refunded, bookings by trip type, top packages, latest bookings
+- Coupons: create, edit, deactivate and delete codes; usage and total discount per code
+- Bookings: payment filter, CSV export, payment and coupon columns; cancelling a paid booking refunds it in full
+- Packages: duplicate a package as a hidden draft
+- Enquiries: internal team notes
+- Subscribers: newsletter list with copy-all-emails
 - Bookings: filter by status, search, and confirm / complete / cancel bookings
 - Packages: add, edit, hide/show and delete packages, including the itinerary editor
 - Enquiries: read messages from the contact form, reply by email, mark as resolved
@@ -112,7 +132,7 @@ The login page also has "Fill in" buttons for these accounts. You can also creat
 | Command | What it does |
 | --- | --- |
 | `npm run dev` | Runs frontend and backend in development mode (auto-reload on changes) |
-| `npm test` | Runs the 20 automated API tests (uses a temporary in-memory database) |
+| `npm test` | Runs the 34 automated API tests (uses a temporary in-memory database) |
 | `npm run seed` | Resets the database to the original sample data |
 | `npm run build` | Builds the React app for production into `client/dist` |
 | `npm start` | Runs the production server: after `npm run build`, open **http://localhost:4000** (API and website on one port) |
@@ -175,7 +195,13 @@ safar-holidays/
 | `bookings` | id, booking_ref, user_id → users, package_id → packages, travel_date, adults, children, contact_phone, special_requests, total_amount, status, created_at |
 | `reviews` | id, user_id → users, package_id → packages, rating (1 to 5), comment (one review per user per package) |
 | `wishlist` | user_id → users, package_id → packages |
-| `enquiries` | id, name, email, phone, subject, message, status (new / resolved) |
+| `enquiries` | id, name, email, phone, subject, message, status (new / resolved), admin_note |
+| `coupons` | id, code (unique), description, discount_type (percent / flat), discount_value, min_amount, max_discount, valid_until, usage_limit, is_active |
+| `payments` | id, booking_id → bookings, amount, method (card / upi), reference, transaction_id, kind (payment / refund) |
+| `notifications` | id, user_id → users, title, message, link, is_read |
+| `subscribers` | id, email (unique), created_at |
+
+`bookings` also stores coupon_code, discount_amount, payment_status (unpaid / paid / refunded), paid_at, refund_amount and cancelled_at.
 
 Lists such as highlights and the itinerary are stored as JSON text inside the `packages` table.
 
@@ -209,6 +235,22 @@ All endpoints start with `/api`. 🔒 = needs login, 👑 = admin only.
 | GET | `/admin/packages` 👑 | All packages including hidden ones |
 | GET / PATCH | `/admin/enquiries`, `/admin/enquiries/:id` 👑 | Read enquiries, mark resolved |
 | GET | `/admin/users` 👑 | Customers with booking totals |
+| GET | `/packages/compare?ids=1,2,3` | Up to 3 packages for comparison |
+| GET | `/coupons` | Current offers |
+| POST | `/bookings/quote` 🔒 | Check a coupon and get the discounted total |
+| GET | `/bookings/:id` 🔒 | One booking with payments and refund quote (invoice) |
+| POST | `/bookings/:id/pay` 🔒 | Pay a confirmed booking by card or UPI (simulated) |
+| PUT | `/auth/me`, `/auth/password` 🔒 | Update profile, change password |
+| GET | `/auth/me/summary` 🔒 | Profile stats and traveller level |
+| GET | `/notifications` 🔒 | Latest notifications and unread count |
+| PATCH / POST | `/notifications/:id/read`, `/notifications/read-all` 🔒 | Mark read |
+| POST | `/newsletter` | Subscribe to the newsletter |
+| POST | `/packages/:id/duplicate` 👑 | Copy a package as a hidden draft |
+| GET | `/admin/bookings.csv` 👑 | Export bookings as CSV |
+| GET / POST / PUT / DELETE | `/admin/coupons`, `/admin/coupons/:id` 👑 | Manage coupons |
+| GET | `/admin/subscribers` 👑 | Newsletter subscribers |
+
+**Test payment details:** card 4111 1111 1111 1111, any future expiry, any CVV. Card 4000 0000 0000 0002 is always declined. Any UPI ID like test@okaxis works.
 
 Logged-in requests send the header `Authorization: Bearer <token>`.
 

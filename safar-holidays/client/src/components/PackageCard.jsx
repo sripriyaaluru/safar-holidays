@@ -1,6 +1,7 @@
 import { Clock } from 'lucide-react';
 import { Link } from 'react-router';
 import { formatINR } from '../lib/format.js';
+import CompareButton from './CompareButton.jsx';
 import Cover from './Cover.jsx';
 import SaveButton from './SaveButton.jsx';
 import Stars from './Stars.jsx';
@@ -33,10 +34,13 @@ export default function PackageCard({ pkg }) {
         </div>
       </div>
 
-      <p className="mt-3 border-t border-line pt-3">
-        <span className="font-display text-xl font-bold">{formatINR(pkg.price)}</span>
-        <span className="text-sm text-slate"> per person</span>
-      </p>
+      <div className="mt-3 flex items-center justify-between gap-3 border-t border-line pt-3">
+        <p>
+          <span className="font-display text-xl font-bold">{formatINR(pkg.price)}</span>
+          <span className="text-sm text-slate"> per person</span>
+        </p>
+        <CompareButton pkg={pkg} />
+      </div>
     </article>
   );
 }

@@ -1,11 +1,13 @@
 import { useState } from 'react';
-import { Building2, Heart, Landmark, Mountain, Search, Trees, Waves } from 'lucide-react';
+import { Building2, Copy, Heart, Landmark, Mountain, Search, Trees, Waves } from 'lucide-react';
 import { Link, useNavigate } from 'react-router';
 import PackageCard from '../components/PackageCard.jsx';
+import RecentlyViewed from '../components/RecentlyViewed.jsx';
+import { useToast } from '../context/ToastContext.jsx';
 import Stars from '../components/Stars.jsx';
 import { ErrorState, Loader } from '../components/States.jsx';
 import { useApi } from '../lib/api.js';
-import { CATEGORY_LABELS } from '../lib/format.js';
+import { CATEGORY_LABELS, couponLabel, formatDate, formatINR } from '../lib/format.js';
 
 const HERO_IMAGE =
   'https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?auto=format&fit=crop&w=2000&q=70';
@@ -79,6 +81,52 @@ function HeroSearch() {
   );
 }
 
+function Offers() {
+  const { data } = useApi('/coupons');
+  const toast = useToast();
+  if (!data?.coupons?.length) return null;
+
+  async function copy(code) {
+    try {
+      await navigator.clipboard.writeText(code);
+      toast(`${code} copied. Paste it when you book.`);
+    } catch {
+      toast(`Use code ${code} when you book.`);
+    }
+  }
+
+  return (
+    <section className="container-page mt-24" aria-labelledby="offers-title">
+      <h2 id="offers-title" className="text-3xl font-bold sm:text-4xl">
+        Offers this month
+      </h2>
+      <p className="mt-2 text-slate">Apply a code in the booking panel of any package.</p>
+      <ul className="mt-8 grid gap-4 md:grid-cols-3">
+        {data.coupons.map((c) => (
+          <li key={c.code} className="ticket flex flex-col p-5">
+            <p className="font-display text-2xl font-extrabold text-peacock">{couponLabel(c)}</p>
+            <p className="mt-1 flex-1 text-ink-soft">{c.description}</p>
+            <p className="mt-2 text-sm text-slate">
+              {c.min_amount > 0 ? `On bookings above ${formatINR(c.min_amount)}. ` : ''}
+              {c.valid_until ? `Valid till ${formatDate(c.valid_until)}.` : ''}
+            </p>
+            <div className="ticket-tear mt-4 -mx-5" aria-hidden />
+            <div className="mt-4 flex items-center justify-between">
+              <span className="rounded-lg border-2 border-dashed border-marigold-deep px-3 py-1 font-display text-lg font-bold tracking-wider">
+                {c.code}
+              </span>
+              <button className="btn-ghost px-3 py-1.5 text-sm" onClick={() => copy(c.code)}>
+                <Copy className="size-4" aria-hidden />
+                Copy
+              </button>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 export default function Home() {
   const featured = useApi('/packages?featured=1&limit=6');
   const meta = useApi('/packages/meta');
@@ -130,6 +178,10 @@ export default function Home() {
           )}
         </div>
       </section>
+
+      <RecentlyViewed />
+
+      <Offers />
 
       {/* Categories */}
       {meta.data && (

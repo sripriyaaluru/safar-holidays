@@ -21,6 +21,16 @@ export default function AdminPackages() {
     }
   }
 
+  async function duplicate(pkg) {
+    try {
+      const res = await api(`/packages/${pkg.id}/duplicate`, { method: 'POST' });
+      toast(res.message);
+      reload();
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  }
+
   async function remove(pkg) {
     if (!window.confirm(`Delete "${pkg.title}"? Packages with bookings are hidden instead of deleted.`)) return;
     try {
@@ -94,6 +104,9 @@ export default function AdminPackages() {
                         <Link to={`/admin/packages/${p.id}/edit`} className="link">
                           Edit
                         </Link>
+                        <button onClick={() => duplicate(p)} className="link">
+                          Duplicate
+                        </button>
                         <button onClick={() => toggleVisibility(p)} className="link">
                           {p.is_active ? 'Hide' : 'Show'}
                         </button>
